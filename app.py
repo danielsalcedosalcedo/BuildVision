@@ -14,6 +14,14 @@ import io
 import time
 from datetime import datetime
 
+import sys
+from pathlib import Path
+
+# Garantizar que la raíz del proyecto esté en sys.path (crítico para Streamlit Cloud en Linux)
+ROOT_DIR = Path(__file__).resolve().parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
 # Importación de módulos del núcleo
 from core.progress_calculator import (
     calculate_zone_progress,
