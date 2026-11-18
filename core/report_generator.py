@@ -4,7 +4,7 @@ Genera documento ejecutivo formal con ReportLab:
 - Resumen ejecutivo y KPIs de avance real vs plan
 - Tabla de pesos y avance por componente (Fórmula Sección 5)
 - Desglose por vanos y alertas de desviación
-- Registro de auditoría HITL y firma del ITO
+- Registro de auditoría HITL y estado de firma electrónica
 """
 import io
 from datetime import datetime
@@ -118,12 +118,12 @@ def generate_weekly_pdf_report(
             Paragraph(f"<b>Sector / Nivel:</b> {level_name}", table_cell),
         ],
         [
-            Paragraph(f"<b>Partida Ancla:</b> Red de Rociadores Contra Incendio (PCI · NFPA 13)", table_cell),
+            Paragraph(f"<b>Partida ancla:</b> Red de rociadores contra incendio (PCI)", table_cell),
             Paragraph(f"<b>Inspector Técnico de Obra (ITO):</b> {ito_name}", table_cell)
         ],
         [
-            Paragraph(f"<b>Modelo de Inferencia:</b> Ultralytics YOLOv8s (5 clases)", table_cell),
-            Paragraph(f"<b>Validación:</b> 100% Verificado Human-in-the-Loop (HITL)", table_cell)
+            Paragraph(f"<b>Fuente de conteo:</b> Modelo, JSON o conteo manual", table_cell),
+            Paragraph(f"<b>Validación:</b> Revisión Human-in-the-Loop (HITL)", table_cell)
         ]
     ]
     meta_table = Table(meta_data, colWidths=[270, 270])
@@ -140,19 +140,25 @@ def generate_weekly_pdf_report(
     story.append(Spacer(1, 10))
 
     # 3. RESUMEN EJECUTIVO (KPIs)
-    level_pct = level_data.get('level_progress_pct', 80.4)
-    plan_pct = 85.0
+    zones = level_data.get('zones', [])
+    level_pct = level_data.get('level_progress_pct', 0.0)
+    total_plan_units = sum(z.get('plan_units_total', 0) for z in zones)
+    plan_pct = (
+        sum(z.get('plan_week_pct', 0.0) * z.get('plan_units_total', 0) for z in zones) / total_plan_units
+        if total_plan_units else 0.0
+    )
     deviation = round(level_pct - plan_pct, 1)
+    inspected_zones = level_data.get('inspected_zones_this_session', 0)
 
     kpi_color = colors.HexColor('#059669') if deviation >= -5.0 else colors.HexColor('#DC2626')
-    status_text = "EN RANGO" if deviation >= -5.0 else ("DESVIACIÓN LEVE" if deviation >= -10.0 else "ALERTA CRÍTICA")
+    review_color = colors.HexColor('#059669') if inspected_zones else colors.HexColor('#D97706')
 
     kpi_data = [
         [
-            Paragraph(f"<b>AVANCE REAL VALIDADO</b><br/><font size='16' color='#0F172A'><b>{level_pct:.1f}%</b></font>", table_cell_bold),
+            Paragraph(f"<b>AVANCE PONDERADO</b><br/><font size='16' color='#0F172A'><b>{level_pct:.1f}%</b></font>", table_cell_bold),
             Paragraph(f"<b>PLAN DE LA SEMANA</b><br/><font size='16' color='#475569'><b>{plan_pct:.1f}%</b></font>", table_cell_bold),
             Paragraph(f"<b>DESVIACIÓN</b><br/><font size='16' color='{kpi_color.hexval()}'><b>{deviation:+.1f} pp</b></font>", table_cell_bold),
-            Paragraph(f"<b>ESTADO DE REVISIÓN</b><br/><font size='12' color='#059669'><b>8/8 Fotos ✓</b><br/><font size='8' color='#64748B'>Sin pendientes</font></font>", table_cell_bold)
+            Paragraph(f"<b>ZONAS INSPECCIONADAS</b><br/><font size='16' color='{review_color.hexval()}'><b>{inspected_zones}</b></font>", table_cell_bold)
         ]
     ]
     kpi_table = Table(kpi_data, colWidths=[135, 135, 135, 135])
@@ -167,12 +173,12 @@ def generate_weekly_pdf_report(
     story.append(kpi_table)
     story.append(Spacer(1, 10))
 
-    # 4. TABLA DE AVANCE POR ZONA / VANO
-    story.append(Paragraph("1. Desglose de Avance Físico por Zona (Vanos)", section_h2))
+    # 4. TABLA DE AVANCE POR ELEMENTO / ZONA
+    story.append(Paragraph("1. Desglose de Avance Físico por Elemento / Zona", section_h2))
     
     zones_rows = [
         [
-            Paragraph("<b>Zona / Vano</b>", table_cell_bold),
+            Paragraph("<b>Elemento / Zona</b>", table_cell_bold),
             Paragraph("<b>Avance Real</b>", table_cell_bold),
             Paragraph("<b>Meta Plan</b>", table_cell_bold),
             Paragraph("<b>Desviación</b>", table_cell_bold),
@@ -181,11 +187,9 @@ def generate_weekly_pdf_report(
         ]
     ]
 
-    for z in level_data.get('zones', []):
+    for z in zones:
         dev = z['deviation_pp']
         status = z['alert_status']
-        row_color = colors.HexColor('#FEE2E2') if status == 'CRÍTICA' else (colors.HexColor('#FEF3C7') if status == 'DESVIACIÓN' else colors.white)
-        
         zones_rows.append([
             Paragraph(f"<b>{z['name']}</b>", table_cell),
             Paragraph(f"{z['progress_pct']:.1f}%", table_cell_bold),
@@ -207,45 +211,63 @@ def generate_weekly_pdf_report(
     story.append(zones_table)
     story.append(Spacer(1, 10))
 
-    # 5. CASO DESTACADO: CASO DORADO CP-05 (VANO C-D)
-    story.append(Paragraph("2. Detalle de Ponderación por Componente (Vano C-D · Caso Dorado CP-05)", section_h2))
+    # 5. DESGLOSE DE LA PRIMERA ZONA POR COMPONENTE
+    detail_zone = zones[0] if zones else None
+    if detail_zone is not None:
+        story.append(Paragraph(f"2. Detalle de Ponderación por Componente ({detail_zone['name']})", section_h2))
     comp_rows = [
         [
-            Paragraph("<b>Componente de Red PCI</b>", table_cell_bold),
+            Paragraph("<b>Componente PCI</b>", table_cell_bold),
             Paragraph("<b>Peso w</b>", table_cell_bold),
             Paragraph("<b>Validado ÷ Plan</b>", table_cell_bold),
             Paragraph("<b>Ratio p(c,z)</b>", table_cell_bold),
             Paragraph("<b>Aporte w·p</b>", table_cell_bold)
-        ],
-        [Paragraph("Tubería (tramos ranurados)", table_cell), Paragraph("0.45", table_cell), Paragraph("12 ÷ 12", table_cell), Paragraph("1.000", table_cell), Paragraph("0.4500", table_cell_bold)],
-        [Paragraph("Soportes y Colgadores antisísmicos", table_cell), Paragraph("0.15", table_cell), Paragraph("14 ÷ 18", table_cell), Paragraph("0.778", table_cell), Paragraph("0.1167", table_cell_bold)],
-        [Paragraph("Rociadores instalados (sprinklers)", table_cell), Paragraph("0.30", table_cell), Paragraph("15 ÷ 24", table_cell), Paragraph("0.625", table_cell), Paragraph("0.1875", table_cell_bold)],
-        [Paragraph("Válvula de control sectorial", table_cell), Paragraph("0.05", table_cell), Paragraph("1 ÷ 1", table_cell), Paragraph("1.000", table_cell), Paragraph("0.0500", table_cell_bold)],
-        [Paragraph("Prueba hidráulica (inspección manual)", table_cell), Paragraph("0.05", table_cell), Paragraph("0 ÷ 1", table_cell), Paragraph("0.000", table_cell), Paragraph("0.0000", table_cell_bold)],
-        [Paragraph("<b>TOTAL AVANCE VANO C-D A(z)</b>", table_cell_bold), Paragraph("<b>1.00</b>", table_cell_bold), Paragraph("<b>42 ÷ 56 unid.</b>", table_cell_bold), Paragraph("-", table_cell), Paragraph("<b>80.4%</b>", table_cell_bold)]
+        ]
     ]
-    comp_table = Table(comp_rows, colWidths=[180, 70, 110, 80, 100])
-    comp_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#E2E8F0')),
-        ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#FEF9C3')),
-        ('BOX', (0, 0), (-1, -1), 0.5, colors.HexColor('#CBD5E1')),
-        ('INNERGRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#E2E8F0')),
-        ('TOPPADDING', (0, 0), (-1, -1), 4),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
-        ('ALIGN', (1, 0), (-1, -1), 'CENTER'),
-    ]))
-    story.append(comp_table)
-    story.append(Spacer(1, 10))
+    if detail_zone is not None:
+        for component in detail_zone['components']:
+            comp_rows.append([
+                Paragraph(component['name'], table_cell),
+                Paragraph(f"{component['weight']:.2f}", table_cell),
+                Paragraph(f"{component['validated']} ÷ {component['plan']}", table_cell),
+                Paragraph(f"{component['ratio_p']:.3f}", table_cell),
+                Paragraph(f"{component['contribution']:.4f}", table_cell_bold)
+            ])
+        comp_rows.append([
+            Paragraph(f"<b>TOTAL AVANCE {detail_zone['name']}</b>", table_cell_bold),
+            Paragraph("<b>1.00</b>", table_cell_bold),
+            Paragraph("-", table_cell_bold),
+            Paragraph("-", table_cell),
+            Paragraph(f"<b>{detail_zone['progress_pct']:.1f}%</b>", table_cell_bold)
+        ])
+        comp_table = Table(comp_rows, colWidths=[180, 70, 110, 80, 100])
+        comp_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#E2E8F0')),
+            ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#FEF9C3')),
+            ('BOX', (0, 0), (-1, -1), 0.5, colors.HexColor('#CBD5E1')),
+            ('INNERGRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#E2E8F0')),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+            ('ALIGN', (1, 0), (-1, -1), 'CENTER'),
+        ]))
+        story.append(comp_table)
+        story.append(Spacer(1, 10))
 
     # 6. OBSERVACIONES Y ALERTAS
     story.append(Paragraph("3. Registro de Hallazgos y Alertas de Desviación", section_h2))
+    alerts = [z for z in zones if z['alert_status'] in ('CRÍTICA', 'DESVIACIÓN')]
     alert_text = (
-        "• <b>Alerta Roja en Vano E-F (-22.0 pp):</b> Retraso crítico en montaje de ramales y soportes respecto a la programación semanal.<br/>"
-        "• <b>Identificación de salidas con tapón (Vano C-D):</b> Se contabilizaron 3 salidas provisionales con tapón que aún no disponen de rociador colgante.<br/>"
-        "• <b>Prueba Hidráulica Pendiente:</b> El sector no cuenta aún con presurización a 200 psi conforme a protocolo NFPA 13.<br/>"
+        "<br/>".join(
+            f"• <b>{z['name']} · {z['alert_status']} ({z['deviation_pp']:+.1f} pp):</b> "
+            f"avance {z['progress_pct']:.1f}% frente al plan {z['plan_week_pct']:.1f}%."
+            for z in alerts
+        )
+        if alerts else "No hay desviaciones respecto a la meta semanal en los datos incluidos."
     )
+    if level_data.get('uses_sample_data'):
+        alert_text += "<br/><b>Nota:</b> Las zonas no inspeccionadas contienen datos de demostración."
     if notes:
-        alert_text += f"• <b>Comentario del ITO:</b> {notes}"
+        alert_text += f"<br/>• <b>Comentario del ITO:</b> {notes}"
 
     alert_box = Table([[Paragraph(alert_text, table_cell)]], colWidths=[540])
     alert_box.setStyle(TableStyle([
@@ -259,13 +281,43 @@ def generate_weekly_pdf_report(
     story.append(alert_box)
     story.append(Spacer(1, 14))
 
-    # 7. REGISTRO DE AUDITORÍA Y FIRMAS
-    story.append(Paragraph("4. Trazabilidad Human-in-the-Loop y Firmas de Aprobación", section_h2))
+    # 7. REGISTRO DE AUDITORÍA Y RESPONSABLE
+    story.append(Paragraph("4. Registro de auditoría", section_h2))
+    if audit_logs:
+        audit_rows = [[
+            Paragraph("<b>Fecha</b>", table_cell_bold),
+            Paragraph("<b>Usuario</b>", table_cell_bold),
+            Paragraph("<b>Acción</b>", table_cell_bold),
+            Paragraph("<b>Zona / componente</b>", table_cell_bold),
+            Paragraph("<b>Valor</b>", table_cell_bold)
+        ]]
+        for entry in audit_logs:
+            audit_rows.append([
+                Paragraph(str(entry.get('timestamp', '')), table_cell),
+                Paragraph(str(entry.get('user', '')), table_cell),
+                Paragraph(str(entry.get('action', '')), table_cell),
+                Paragraph(f"{entry.get('zone_id', '')} / {entry.get('component', '')}", table_cell),
+                Paragraph(f"{entry.get('old_value', '')} -> {entry.get('new_value', '')}", table_cell)
+            ])
+        audit_table = Table(audit_rows, colWidths=[85, 100, 110, 140, 105], repeatRows=1)
+        audit_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#E2E8F0')),
+            ('BOX', (0, 0), (-1, -1), 0.5, colors.HexColor('#CBD5E1')),
+            ('INNERGRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#E2E8F0')),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4)
+        ]))
+        story.append(audit_table)
+    else:
+        story.append(Paragraph("No hay acciones registradas en esta sesión.", table_cell))
+    story.append(Spacer(1, 8))
+    story.append(Paragraph("5. Responsable y estado de firma", section_h2))
     
     sign_data = [
         [
-            Paragraph(f"<b>Inspector Técnico de Obra (ITO)</b><br/><br/>_______________________________<br/><b>{ito_name}</b><br/>Validación técnica en terreno", table_cell),
-            Paragraph(f"<b>Jefe de Terreno / Administrador</b><br/><br/>_______________________________<br/><b>Patricia Luna / Diego Avella</b><br/>Recepción conforme de avance", table_cell)
+            Paragraph(f"<b>Responsable indicado</b><br/><b>{ito_name}</b><br/>La firma electrónica no está implementada.", table_cell),
+            Paragraph("<b>VoBo de obra</b><br/>Pendiente de firma y aprobación externa.", table_cell)
         ]
     ]
     sign_table = Table(sign_data, colWidths=[270, 270])

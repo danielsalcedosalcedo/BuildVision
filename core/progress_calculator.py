@@ -7,11 +7,11 @@ from typing import Dict, Any, Tuple, List
 
 # Pesos acordados según Sección 5
 DEFAULT_WEIGHTS: Dict[str, float] = {
-    'tuberia': 0.45,           # Tuberías principales y ramales (tramos)
-    'soportes': 0.15,          # Soportes sismorresistentes y colgadores tipo pera
-    'rociadores': 0.30,        # Rociadores (sprinklers) instalados
-    'valvula': 0.05,           # Válvula de control sectorial
-    'prueba_hidraulica': 0.05  # Prueba hidráulica estanca (casilla manual ITO)
+    'tuberia': 0.45,
+    'soportes': 0.15,
+    'rociadores': 0.30,
+    'valvula': 0.05,
+    'prueba_hidraulica': 0.05,
 }
 
 COMPONENT_NAMES: Dict[str, str] = {
@@ -19,7 +19,7 @@ COMPONENT_NAMES: Dict[str, str] = {
     'soportes': 'Soportes y Colgadores',
     'rociadores': 'Rociadores instalados',
     'valvula': 'Válvula de control',
-    'prueba_hidraulica': 'Prueba hidráulica (inspección manual)'
+    'prueba_hidraulica': 'Prueba hidráulica (inspección manual)',
 }
 
 def calculate_zone_progress(

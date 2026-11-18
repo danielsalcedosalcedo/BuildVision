@@ -1,8 +1,4 @@
-"""
-BuildVision AI - Módulo de Control de Calidad de Fotos (RF-02)
-Valida resolución mínima (>= 8 MP / 1280px), nitidez (varianza Laplaciano),
-y detecta fotos borrosas antes de consumir inferencia de IA.
-"""
+"""Image-quality checks for site photos before inference or manual review."""
 from typing import Dict, Any, Tuple
 import numpy as np
 from PIL import Image
@@ -10,7 +6,7 @@ from PIL import Image
 def analyze_photo_quality(image: Image.Image) -> Dict[str, Any]:
     """
     Aplica los criterios de la Sección 4 y RF-02:
-    - Resolución mínima recomendada: >= 8 Megapíxeles (mínimo 1280 px de ancho)
+    - Resolución mínima recomendada: >= 2 Megapíxeles y un lado de al menos 1280 px
     - Nitidez: varianza del Laplaciano sobre la imagen en escala de grises
     """
     width, height = image.size
@@ -45,7 +41,10 @@ def analyze_photo_quality(image: Image.Image) -> Dict[str, Any]:
     if not is_sharp:
         warnings.append("Aviso de nitidez: Imagen potencialmente movida o desenfocada. Se recomienda repetir la toma con luz adecuada.")
     if not is_adequate_res:
-        warnings.append(f"Resolución baja ({width}x{height}, {mp:.1f} MP). Se exige mínimo 1280px para detectar rociadores pequeños.")
+        warnings.append(
+            f"Resolución baja ({width}x{height}, {mp:.1f} MP). "
+            "Se recomienda un lado de al menos 1280 px y 2 MP para revisar componentes PCI."
+        )
 
     passed = is_sharp and is_adequate_res
 
